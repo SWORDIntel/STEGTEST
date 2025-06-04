@@ -61,7 +61,7 @@ def embed_message_jsteg(image_path, secret_message, output_path):
     # Determine which coefficient arrays to use (e.g., Y channel for grayscale, all for color)
     # For simplicity, this example will try to embed in all available coefficient arrays.
     # Typically, JSteg targets the Y (luminance) channel primarily.
-    
+
     coef_arrays = jpeg_struct.coef_arrays
     if not coef_arrays:
         print(f"Error: No DCT coefficient arrays found in {image_path}.")
@@ -85,7 +85,7 @@ def embed_message_jsteg(image_path, secret_message, output_path):
             if data_idx >= data_len: break
             for c_block_start in range(0, component_array.shape[1], 8):
                 if data_idx >= data_len: break
-                
+
                 block = component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8]
 
                 # Iterate AC coefficients in zigzag order (skip DC at index 0 of zigzag_indices_8x8)
@@ -98,16 +98,16 @@ def embed_message_jsteg(image_path, secret_message, output_path):
                     # JSteg rule: skip coefficients with value 0 or 1 (or -1, though LSB of -1 is same as 1)
                     if coeff_val != 0 and coeff_val != 1:
                         bit_to_embed = int(data_to_embed_bits[data_idx])
-                        
+
                         # Modify LSB
                         if bit_to_embed == 0:
                             block[r_coeff, c_coeff] = coeff_val & ~1 # Set LSB to 0
                         else:
                             block[r_coeff, c_coeff] = coeff_val | 1  # Set LSB to 1
-                        
+
                         data_idx += 1
                         coeffs_modified_count += 1
-                
+
                 # Put modified block back (though modification was in-place for this setup)
                 # component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8] = block
 
@@ -180,16 +180,16 @@ def extract_message_jsteg(image_path):
         return None
 
     extracted_bits = ""
-    
+
     # Pre-calculate for 8x8 blocks if components are standard
-    zigzag_indices_8x8 = get_zigzag_indices((8,8)) 
+    zigzag_indices_8x8 = get_zigzag_indices((8,8))
 
     for component_array in coef_arrays:
         # JSteg operates on 8x8 blocks
         if component_array.ndim != 2 or component_array.shape[0] % 8 != 0 or component_array.shape[1] % 8 != 0:
             print(f"Warning: Component array is not a standard 8x8 block structure. Skipping during extraction.")
             continue
-            
+
         for r_block_start in range(0, component_array.shape[0], 8):
             for c_block_start in range(0, component_array.shape[1], 8):
                 block = component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8]
@@ -207,7 +207,183 @@ def extract_message_jsteg(image_path):
                         if extracted_bits.endswith(DELIMITER_BIT_STRING):
                             message_bits = extracted_bits[:-len(DELIMITER_BIT_STRING)]
                             return convert_bits_to_string(message_bits)
-    
+
     print("Warning: Delimiter not found in the image. Message may be incomplete, corrupted, or not present.")
+    return None
+
+# --- JPEG Steganography (F5 Algorithm - Conceptual Implementation) ---
+def embed_message_f5(image_path, secret_message, output_path):
+    """
+    Embeds a secret message into a JPEG image using a simplified F5-like algorithm.
+    Modifies AC DCT coefficients by decrementing their absolute value if LSB mismatch.
+    Skips zero coefficients and coefficients with absolute value 1 if LSB mismatches.
+    """
+    try:
+        jpeg_struct = jpegio.read(image_path)
+    except FileNotFoundError:
+        print(f"Error F5: Input image not found at {image_path}")
+        return False
+    except Exception as e:
+        print(f"Error F5: Reading JPEG file {image_path} with jpegio: {e}")
+        return False
+
+    # Data Preparation
+    bits_to_embed = "".join(format(ord(char), '08b') for char in secret_message)
+    bits_to_embed += DELIMITER_BIT_STRING
+    len_bits_to_embed = len(bits_to_embed)
+
+    if not jpeg_struct.coef_arrays:
+        print(f"Error F5: No DCT coefficient arrays found in {image_path}.")
+        return False
+
+    # Capacity Check (Simplified: count non-zero AC coefficients)
+    available_slots = 0
+    zigzag_indices_8x8 = get_zigzag_indices((8,8)) # Assuming 8x8 blocks
+
+    for component_array in jpeg_struct.coef_arrays:
+        if component_array.ndim != 2 or component_array.shape[0] % 8 != 0 or component_array.shape[1] % 8 != 0:
+            continue # Skip non-standard components for capacity check
+        for r_block_start in range(0, component_array.shape[0], 8):
+            for c_block_start in range(0, component_array.shape[1], 8):
+                block = component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8]
+                for i in range(1, len(zigzag_indices_8x8)): # AC coefficients
+                    r_coeff, c_coeff = zigzag_indices_8x8[i]
+                    coeff_val = block[r_coeff, c_coeff]
+                    if coeff_val != 0:
+                        available_slots += 1
+
+    if len_bits_to_embed > available_slots:
+        print(f"Error F5: Message too large for simplified capacity. "
+              f"Bits to embed: {len_bits_to_embed}, Available non-zero AC slots: {available_slots}")
+        return False
+
+    # Embedding Loop
+    data_idx = 0
+    coeffs_modified_count = 0
+    # Deep copy coefficient arrays for modification
+    modified_coef_arrays = [np.copy(arr) for arr in jpeg_struct.coef_arrays]
+
+    try:
+        for component_array in modified_coef_arrays:
+            if data_idx >= len_bits_to_embed: break
+            if component_array.ndim != 2 or component_array.shape[0] % 8 != 0 or component_array.shape[1] % 8 != 0:
+                continue # Skip non-standard components
+
+            for r_block_start in range(0, component_array.shape[0], 8):
+                if data_idx >= len_bits_to_embed: break
+                for c_block_start in range(0, component_array.shape[1], 8):
+                    if data_idx >= len_bits_to_embed: break
+
+                    current_block = component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8]
+
+                    for i in range(1, len(zigzag_indices_8x8)): # AC coeffs
+                        if data_idx >= len_bits_to_embed: break
+
+                        r_coeff, c_coeff = zigzag_indices_8x8[i]
+                        coeff_val = current_block[r_coeff, c_coeff]
+
+                        if coeff_val == 0:
+                            continue # Cannot use zero coefficients for F5
+
+                        message_bit = int(bits_to_embed[data_idx])
+                        coeff_lsb = int(coeff_val) & 1
+
+                        if coeff_lsb == message_bit:
+                            data_idx += 1
+                            continue
+                        else: # LSB mismatch, need to change coefficient
+                            if abs(coeff_val) == 1:
+                                # Cannot change without making it zero, so skip this coefficient for this bit
+                                continue
+
+                            # Decrement absolute value (shrink towards zero)
+                            if coeff_val > 0:
+                                current_block[r_coeff, c_coeff] -= 1
+                            else: # coeff_val < 0
+                                current_block[r_coeff, c_coeff] += 1
+
+                            coeffs_modified_count += 1
+                            data_idx += 1
+
+    except Exception as e: # Catch any unexpected errors during coefficient manipulation
+        print(f"Error F5: Unexpected error during embedding loop: {e}")
+        return False
+
+
+    # Post-Embedding Check
+    if data_idx < len_bits_to_embed:
+        print(f"Error F5: Not all bits embedded. Message may be too large or too many unusable coefficients (abs(coeff)==1).")
+        print(f"  Bits to embed: {len_bits_to_embed}, Bits successfully embedded: {data_idx}, Coeffs modified: {coeffs_modified_count}")
+        return False
+
+    # Save Output
+    try:
+        jpeg_struct_to_write = jpegio.JpegStructure(
+            coef_arrays=modified_coef_arrays,
+            quant_tables=jpeg_struct.quant_tables,
+            ac_huff_tables=jpeg_struct.ac_huff_tables,
+            dc_huff_tables=jpeg_struct.dc_huff_tables,
+            # Potentially add other fields if jpegio.read provided them and write needs them
+            # e.g., com=jpeg_struct.com if it exists
+        )
+        jpegio.write(jpeg_struct_to_write, output_path)
+        print(f"F5: Message embedded successfully into {output_path}.")
+        print(f"  {coeffs_modified_count} DCT coefficients modified.")
+        print(f"  Message bit length (with delimiter): {len_bits_to_embed}")
+        return True
+    except Exception as e:
+        print(f"Error F5: Writing JPEG file {output_path} with jpegio: {e}")
+        return False
+
+def extract_message_f5(image_path):
+    """
+    Extracts a secret message from a JPEG image embedded with a simplified F5-like algorithm.
+    Reads the LSB of non-zero AC DCT coefficients.
+    """
+    try:
+        jpeg_struct = jpegio.read(image_path)
+    except FileNotFoundError:
+        print(f"Error F5 Extract: Input image not found at {image_path}")
+        return None
+    except Exception as e:
+        print(f"Error F5 Extract: Reading JPEG file {image_path} with jpegio: {e}")
+        return None
+
+    if not jpeg_struct.coef_arrays:
+        print(f"Error F5 Extract: No DCT coefficient arrays found in {image_path}.")
+        return None
+
+    extracted_bits = ""
+    zigzag_indices_8x8 = get_zigzag_indices((8,8)) # Assuming 8x8 blocks
+
+    try:
+        for component_array in jpeg_struct.coef_arrays:
+            if component_array.ndim != 2 or component_array.shape[0] % 8 != 0 or component_array.shape[1] % 8 != 0:
+                continue # Skip non-standard components
+
+            for r_block_start in range(0, component_array.shape[0], 8):
+                for c_block_start in range(0, component_array.shape[1], 8):
+                    current_block = component_array[r_block_start:r_block_start+8, c_block_start:c_block_start+8]
+
+                    for i in range(1, len(zigzag_indices_8x8)): # AC coeffs
+                        r_coeff, c_coeff = zigzag_indices_8x8[i]
+                        coeff_val = current_block[r_coeff, c_coeff]
+
+                        if coeff_val == 0:
+                            # F5 skips zero coefficients during embedding, so they don't carry data.
+                            continue
+
+                        extracted_bit = str(int(coeff_val) & 1)
+                        extracted_bits += extracted_bit
+
+                        if extracted_bits.endswith(DELIMITER_BIT_STRING):
+                            message_bits = extracted_bits[:-len(DELIMITER_BIT_STRING)]
+                            return convert_bits_to_string(message_bits)
+
+    except Exception as e: # Catch any unexpected errors during coefficient reading
+        print(f"Error F5 Extract: Unexpected error during extraction loop: {e}")
+        return None
+
+    print("Warning F5 Extract: Delimiter not found in the image. Message may be incomplete, corrupted, or not present.")
     return None
 # --- END OF REPLACEMENT BLOCK ---
