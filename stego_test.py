@@ -386,4 +386,101 @@ def extract_message_f5(image_path):
 
     print("Warning F5 Extract: Delimiter not found in the image. Message may be incomplete, corrupted, or not present.")
     return None
+
+# --- UI Menu Functions ---
+
+def handle_jsteg_embed():
+    print("\n--- Embed Message using JSteg ---")
+    input_image = input("Enter input JPEG image path: ")
+    secret_message = input("Enter secret message to embed: ")
+    output_image = input("Enter output JPEG image path: ")
+
+    # Basic check for file existence (optional, stego functions also check)
+    # import os # Add this import at the top if using os.path.exists
+    # if not os.path.exists(input_image):
+    #     print(f"Error: Input image '{input_image}' not found.")
+    #     return
+
+    if embed_message_jsteg(input_image, secret_message, output_image):
+        print("JSteg embedding successful.")
+    else:
+        print("JSteg embedding failed. Check error messages above.")
+
+def handle_jsteg_extract():
+    print("\n--- Extract Message using JSteg ---")
+    input_image = input("Enter JPEG image path to extract from: ")
+
+    message = extract_message_jsteg(input_image)
+    if message is not None:
+        print(f"Extracted JSteg message: {message}")
+    else:
+        print("Failed to extract JSteg message or no message found.")
+
+def handle_f5_embed():
+    print("\n--- Embed Message using F5 ---")
+    input_image = input("Enter input JPEG image path: ")
+    secret_message = input("Enter secret message to embed: ")
+    output_image = input("Enter output JPEG image path: ")
+
+    if embed_message_f5(input_image, secret_message, output_image):
+        print("F5 embedding successful.")
+    else:
+        print("F5 embedding failed. Check error messages above.")
+
+def handle_f5_extract():
+    print("\n--- Extract Message using F5 ---")
+    input_image = input("Enter JPEG image path to extract from: ")
+
+    message = extract_message_f5(input_image)
+    if message is not None:
+        print(f"Extracted F5 message: {message}")
+    else:
+        print("Failed to extract F5 message or no message found.")
+
+def jpeg_stego_menu():
+    while True:
+        print("\n--- JPEG Steganography Menu ---")
+        print("1. Embed message using JSteg")
+        print("2. Extract message using JSteg")
+        print("3. Embed message using F5")
+        print("4. Extract message using F5")
+        print("5. Back to Main Menu")
+        choice = input("Enter your choice (1-5): ")
+
+        if choice == '1':
+            handle_jsteg_embed()
+        elif choice == '2':
+            handle_jsteg_extract()
+        elif choice == '3':
+            handle_f5_embed()
+        elif choice == '4':
+            handle_f5_extract()
+        elif choice == '5':
+            break
+        else:
+            print("Invalid choice. Please enter a number between 1 and 5.")
+
+def main_menu():
+    # Import os at the top of the file if path checks are added to handlers
+    # import os
+    print("Welcome to Steganography Tool")
+    while True:
+        print("\n--- Main Menu ---")
+        print("1. JPEG Steganography")
+        print("2. Exit")
+        choice = input("Enter your choice (1-2): ")
+
+        if choice == '1':
+            jpeg_stego_menu()
+        elif choice == '2':
+            print("Exiting program.")
+            break
+        else:
+            print("Invalid choice. Please enter 1 or 2.")
+
+if __name__ == "__main__":
+    # Note: Running this script with UI might be problematic in some non-interactive
+    # environments. The core functions are still importable and usable directly.
+    # The previous environment issues with jpegio/numpy might also affect CLI execution.
+    main_menu()
 # --- END OF REPLACEMENT BLOCK ---
