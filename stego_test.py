@@ -2,6 +2,36 @@ import jpegio
 import numpy as np
 from PIL import Image # Keep for DELIMITER_BIT_STRING for now, or move DELIMITER
 
+import csv
+import os
+from datetime import datetime
+
+# --- Logging Utility ---
+LOG_DIR = "results"
+LOG_FILE = os.path.join(LOG_DIR, "stegtest_log.csv")
+LOG_HEADER = ["Timestamp", "OperationName", "BaseImagePath", "StegoImagePath",
+              "PayloadSample", "ExtractedPayloadSample", "Status", "Message"]
+
+def log_stego_operation(log_data_dict):
+    """
+    Logs a steganography operation to a CSV file.
+    log_data_dict should be a dictionary with keys matching LOG_HEADER.
+    """
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+
+        # Check if file exists to determine if header needs to be written
+        file_exists = os.path.isfile(LOG_FILE)
+
+        with open(LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=LOG_HEADER)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(log_data_dict)
+    except Exception as e:
+        print(f"[Logging Error] Failed to write to log file {LOG_FILE}: {e}")
+        # Do not let logging failure crash the main application
+
 # DELIMITER_BIT_STRING is defined globally in the original file.
 # Ensure it's available or defined here if this code is moved/restructured.
 # For this replacement, we assume it's accessible.
@@ -401,20 +431,54 @@ def handle_jsteg_embed():
     #     print(f"Error: Input image '{input_image}' not found.")
     #     return
 
-    if embed_message_jsteg(input_image, secret_message, output_image):
+    log_data = {
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "OperationName": "JSteg_Embed",
+        "BaseImagePath": input_image,
+        "StegoImagePath": output_image,
+        "PayloadSample": secret_message[:20], # Log first 20 chars as sample
+        "ExtractedPayloadSample": "",
+        "Status": "",
+        "Message": ""
+    }
+
+    result = embed_message_jsteg(input_image, secret_message, output_image)
+    if result:
         print("JSteg embedding successful.")
+        log_data["Status"] = "SUCCESS"
+        log_data["Message"] = "JSteg embedding successful."
     else:
         print("JSteg embedding failed. Check error messages above.")
+        log_data["Status"] = "FAILURE"
+        log_data["Message"] = "JSteg embedding failed. See console for specific errors from embed_message_jsteg."
+    log_stego_operation(log_data)
 
 def handle_jsteg_extract():
     print("\n--- Extract Message using JSteg ---")
     input_image = input("Enter JPEG image path to extract from: ")
 
+    log_data = {
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "OperationName": "JSteg_Extract",
+        "BaseImagePath": input_image,
+        "StegoImagePath": "", # Not applicable for extraction
+        "PayloadSample": "", # Not applicable for extraction
+        "ExtractedPayloadSample": "",
+        "Status": "",
+        "Message": ""
+    }
+
     message = extract_message_jsteg(input_image)
     if message is not None:
         print(f"Extracted JSteg message: {message}")
+        log_data["Status"] = "SUCCESS"
+        log_data["ExtractedPayloadSample"] = message[:20] # Log first 20 chars
+        log_data["Message"] = "JSteg extraction successful."
     else:
         print("Failed to extract JSteg message or no message found.")
+        log_data["Status"] = "FAILURE"
+        log_data["Message"] = "JSteg extraction failed or no message found. See console for errors from extract_message_jsteg."
+    log_stego_operation(log_data)
 
 def handle_f5_embed():
     print("\n--- Embed Message using F5 ---")
@@ -422,20 +486,54 @@ def handle_f5_embed():
     secret_message = input("Enter secret message to embed: ")
     output_image = input("Enter output JPEG image path: ")
 
-    if embed_message_f5(input_image, secret_message, output_image):
+    log_data = {
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "OperationName": "F5_Embed",
+        "BaseImagePath": input_image,
+        "StegoImagePath": output_image,
+        "PayloadSample": secret_message[:20],
+        "ExtractedPayloadSample": "",
+        "Status": "",
+        "Message": ""
+    }
+
+    result = embed_message_f5(input_image, secret_message, output_image)
+    if result:
         print("F5 embedding successful.")
+        log_data["Status"] = "SUCCESS"
+        log_data["Message"] = "F5 embedding successful."
     else:
         print("F5 embedding failed. Check error messages above.")
+        log_data["Status"] = "FAILURE"
+        log_data["Message"] = "F5 embedding failed. See console for specific errors from embed_message_f5."
+    log_stego_operation(log_data)
 
 def handle_f5_extract():
     print("\n--- Extract Message using F5 ---")
     input_image = input("Enter JPEG image path to extract from: ")
 
+    log_data = {
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "OperationName": "F5_Extract",
+        "BaseImagePath": input_image,
+        "StegoImagePath": "",
+        "PayloadSample": "",
+        "ExtractedPayloadSample": "",
+        "Status": "",
+        "Message": ""
+    }
+
     message = extract_message_f5(input_image)
     if message is not None:
         print(f"Extracted F5 message: {message}")
+        log_data["Status"] = "SUCCESS"
+        log_data["ExtractedPayloadSample"] = message[:20]
+        log_data["Message"] = "F5 extraction successful."
     else:
         print("Failed to extract F5 message or no message found.")
+        log_data["Status"] = "FAILURE"
+        log_data["Message"] = "F5 extraction failed or no message found. See console for errors from extract_message_f5."
+    log_stego_operation(log_data)
 
 def jpeg_stego_menu():
     while True:
