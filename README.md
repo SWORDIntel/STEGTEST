@@ -123,3 +123,7 @@ Use this section if you are testing direct embedding/extraction using the "Embed
 *   **Observations**: `(e.g., File copied, warnings displayed, conceptual logic notes, Signal simulation steps followed)`
 
 ---
+
+## License
+
+This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
